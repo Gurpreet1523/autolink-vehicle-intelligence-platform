@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: vehicleapp
+          POSTGRES_PASSWORD: change-me
+          POSTGRES_DB: vehicledb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vehicleapp -d vehicledb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Lint
+        run: ruff check backend
+
+      - name: Tests
+        working-directory: backend
+        run: pytest -q --cov=app --cov-report=term-missing
+
+      - name: Security scan
+        run: bandit -r backend/app -ll
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build -t vehicle-api:ci ./backend
+      - name: Build frontend image
+        run: docker build -t vehicle-dashboard:ci ./frontend
